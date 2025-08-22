@@ -9,7 +9,7 @@ char *str_dup(const char *s);
 /* Remove leading whitespace from the given string, returning its new length. */
 size_t str_lstrip(char *s);
 
-/* Remove leading whitespace from the given string, returning its new length. */
+/* Remove trailing whitespace from the given string, returning its new length. */
 size_t str_rstrip(char *s);
 
 /* Remove leading and trailing whitespace from the given string, returning its
