@@ -1,12 +1,16 @@
-.PHONY: all ansi_c clean
+.PHONY: all clean
 
-all: ansi_c
+SRC := hash.c htable.c log.c prime_po2s.c str.c
 
-ansi_c:
-	$(MAKE) -C ansi_c all
+OBJ := $(patsubst %.c,%.o,$(SRC))
+
+all: $(OBJ)
 
 clean:
-	$(MAKE) -C ansi_c clean
+	$(RM) *.o $(BIN)
 
-ansi_c/%:
-	$(MAKE) -C ansi_c $(patsubst ansi_c/%,%,$@)
+hash.o: hash.h
+htable.o: htable.h prime_po2s.h
+log.o: log.h str.h
+prime_po2s.o: prime_po2s.h
+str.o: str.h

@@ -1,7 +1,8 @@
 .PHONY: all src clean
 
-export CFLAGS ?= -Og -g -pedantic -std=c99 -Wall -Werror -Wextra -Wfatal-errors
-export LDFLAGS ?=
+export CFLAGS ?= -Og -g -pedantic -std=c90 -Wall -Werror -Wextra -Wfatal-errors \
+			-Wno-error=pedantic -Wno-error=unused-parameter
+export LDFLAGS ?= -lm # log.h uses math.h
 export LDLIBS ?=
 
 all: src
