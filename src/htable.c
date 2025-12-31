@@ -290,27 +290,25 @@ static void destroy_key_values(struct htable_t *ht)
 
 	assert(is_valid_htable(ht));
 
-	for (i = 0; ht->len && i < ht->cap; i++) {
+	for (i = 0; i < ht->cap; i++) {
 		struct htable_bucket *b = &ht->buckets[i];
 		assert(is_valid_bucket(b));
 
-		if (!b->in_use) {
-			continue;
+		if (b->in_use) {
+			if (ht->destroy_val != NULL) {
+				ht->destroy_val(b->value);
+			}
+			b->value = NULL;
+			if (ht->destroy_key != NULL) {
+				ht->destroy_key(b->key);
+			}
+			b->key = NULL;
 		}
-
-		if (ht->destroy_val != NULL) {
-			ht->destroy_val(b->value);
-		}
-		b->value = NULL;
-		if (ht->destroy_key != NULL) {
-			ht->destroy_key(b->key);
-		}
-		b->key = NULL;
 
 		b->hash = b->in_use = 0;
-		assert(ht->len);
-		ht->len--;
+		b->deleted = 0;
 	}
+	ht->len = 0;
 }
 
 static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
@@ -514,8 +512,7 @@ static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
 		return -1;
 	}
 
-	old_len = ht->len;
-	for (i = 0; old_len && i < ht->cap; i++) {
+	for (i = 0; i < ht->cap; i++) {
 		struct htable_bucket *old_bucket = &ht->buckets[i], *new_bucket;
 		size_t new_idx;
 
@@ -536,9 +533,7 @@ static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
 		new_bucket->hash = old_bucket->hash;
 		new_bucket->key = old_bucket->key;
 		new_bucket->value = old_bucket->value;
-		old_len--;
 	}
-	assert(!old_len);
 
 	free(ht->buckets);
 	ht->buckets = new.buckets;
