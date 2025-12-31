@@ -4,9 +4,9 @@ Snippets are my repositories of things I've had to type several times before and
 decided to leave them somewhere handy for when I have to do so again in the
 future.
 
-This is the one for C - specifically C89/C90/ANSI C.
+This is the one for C89/C90/ANSI C.
 
-# License
+## License
 
 [MIT No Attribution](https://spdx.org/licenses/MIT-0.html) (SPDX: `MIT-0`)
 **unless otherwise noted**.
