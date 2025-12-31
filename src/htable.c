@@ -469,7 +469,7 @@ static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
 {
 	struct htable_t new;
 	short may_need_realloc = 0;
-	size_t i, old_len;
+	size_t i;
 
 	assert(is_valid_htable(ht));
 
