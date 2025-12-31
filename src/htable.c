@@ -28,6 +28,7 @@ struct htable_t {
 	size_t len, min_cap, cap;
 	struct htable_bucket {
 		short in_use;
+		short deleted;
 		size_t hash;
 		void *key, *value;
 	} *buckets;
@@ -234,6 +235,7 @@ int htable_remove(htable_t *ht, void *key)
 	}
 	b->key = NULL;
 	b->in_use = b->hash = 0;
+	b->deleted = 1;
 
 	if (optimize_buckets_for_len(ht, --ht->len, &load_factor_bounds)) {
 		return -1;
@@ -266,6 +268,7 @@ int htable_set(htable_t *ht, void *key, void *value)
 	}
 
 	b->in_use = 1;
+	b->deleted = 0;
 	b->hash = hash;
 	b->key = key;
 	b->value = value;
@@ -316,7 +319,7 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 	/* Linear probe 
 	   TODO quadratic probe? */
 
-	struct htable_bucket *b;
+	struct htable_bucket *b, *tombstone = NULL;
 	size_t i0, i, hash;
 
 	assert(is_valid_htable(ht));
@@ -333,17 +336,21 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 
 	b = NULL;
 	i0 = i = hash % ht->cap;
-	while (b == NULL || i0 != i) {
+	while (1) {
 		b = &ht->buckets[i];
 
 		/* no bucket with this key, and this is the first non-empty match.
 		return it so it can be used in a set operation
 		*/
 		if (!b->in_use) {
-			return b;
-		}
-
-		if (ht->cmp_key(key, b->key)) {
+			if (b->deleted) {
+				if (tombstone == NULL) {
+					tombstone = b;
+				}
+			} else {
+				return tombstone ? tombstone : b;
+			}
+		} else if (ht->cmp_key(key, b->key)) {
 			/* found a matching key */
 			return b;
 		}
@@ -351,6 +358,10 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 		i++;
 		if (i >= ht->cap) {
 			i = 0;
+		}
+		if (i == i0) {
+			if (tombstone) return tombstone;
+			break;
 		}
 	}
 	/* Neither key nor an empty bucket found. Impossible, since we should
@@ -394,7 +405,7 @@ static int is_valid_bucket(struct htable_bucket *b)
 		return 0;
 	}
 
-	if (!b->in_use) {
+	if (!b->in_use && !b->deleted) {
 		if (b->hash != 0) {
 			return 0;
 		}
@@ -506,12 +517,21 @@ static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
 	old_len = ht->len;
 	for (i = 0; old_len && i < ht->cap; i++) {
 		struct htable_bucket *old_bucket = &ht->buckets[i], *new_bucket;
+		size_t new_idx;
 
 		if (!old_bucket->in_use) {
 			continue;
 		}
 
-		new_bucket = &new.buckets[old_bucket->hash % new.cap];
+		new_idx = old_bucket->hash % new.cap;
+		while (new.buckets[new_idx].in_use) {
+			new_idx++;
+			if (new_idx >= new.cap) {
+				new_idx = 0;
+			}
+		}
+		new_bucket = &new.buckets[new_idx];
+
 		new_bucket->in_use = 1;
 		new_bucket->hash = old_bucket->hash;
 		new_bucket->key = old_bucket->key;
