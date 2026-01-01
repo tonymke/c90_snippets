@@ -354,7 +354,7 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 					return tombstone == NULL ? b : tombstone;
 				}
 			}
-		} else if (ht->cmp_key(key, b->key)) {
+		} else if (ht->cmp_key(key, b->key) == 0) {
 			/* Found the exact key. */
 			return b;
 		}
