@@ -314,7 +314,7 @@ static void destroy_key_values(struct htable_t *ht)
 static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 						const size_t *precomputed_hash)
 {
-	/* Linear probe 
+	/* Linear probe
 	   TODO quadratic probe? */
 
 	struct htable_bucket *b, *tombstone = NULL;
@@ -334,22 +334,26 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 
 	b = NULL;
 	i0 = i = hash % ht->cap;
-	while (1) {
+
+	do {
 		b = &ht->buckets[i];
 
-		/* no bucket with this key, and this is the first non-empty match.
-		return it so it can be used in a set operation
-		*/
 		if (!b->in_use) {
 			if (b->deleted) {
+				/* Record the first tombstone we found. Continue
+				 * searching until a true delete or non-matching
+				 * key, as the actual match may be after any
+				 * number of tombstones. */
 				if (tombstone == NULL) {
 					tombstone = b;
+				} else {
+					/* True empty slot found - the key isn't
+					 * here. */
+					return tombstone == NULL ? b : tombstone;
 				}
-			} else {
-				return tombstone ? tombstone : b;
 			}
 		} else if (ht->cmp_key(key, b->key)) {
-			/* found a matching key */
+			/* Found the exact key. */
 			return b;
 		}
 
@@ -357,14 +361,11 @@ static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
 		if (i >= ht->cap) {
 			i = 0;
 		}
-		if (i == i0) {
-			if (tombstone) return tombstone;
-			break;
-		}
-	}
-	/* Neither key nor an empty bucket found. Impossible, since we should
-	 * always have space. Dump core for debugging. */
-	abort();
+	} while (i != i0);
+
+	/* If we wrapped around, the key isn't here. Return a tombstone if we
+	 * have one to insert into, other NULL (error). */
+	return tombstone;
 }
 
 static int is_valid_htable(htable_t *ht)
