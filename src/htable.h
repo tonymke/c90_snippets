@@ -8,7 +8,7 @@
 typedef struct htable_t htable_t;
 
 typedef int (*htable_cmp_fn)(void *a, void *b);
-typedef int (*htable_hash_fn)(void *p);
+typedef size_t (*htable_hash_fn)(void *p);
 typedef void (*htable_destroy_fn)(void *p);
 
 htable_t *htable_create(size_t min_cap, htable_hash_fn hash_key,
