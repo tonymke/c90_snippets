@@ -256,7 +256,9 @@ int htable_set(htable_t *ht, void *key, void *value)
 
 	hash = ht->hash_key(key);
 	b = find_bucket_by_key(ht, key, &hash);
-	assert(b != NULL);
+	if (b == NULL) {
+		return -1; /* table full */
+	}
 
 	if (b->in_use) {
 		if (ht->destroy_val != NULL) {
