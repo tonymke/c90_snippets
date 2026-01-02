@@ -1,2 +1,4 @@
 *.o
 *.dSYM/
+tests/test_hash
+tests/test_str
