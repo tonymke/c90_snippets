@@ -45,6 +45,10 @@ size_t hash_cstring_djb2(const char *s)
 	size_t hash;
 	unsigned c;
 
+	if (s == NULL) {
+		return 0;
+	}
+
 	hash = 5381;
 	while ((c = (unsigned)*s++)) {
 		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
@@ -56,6 +60,10 @@ size_t hash_cstring_fnv_1a(const char *s)
 {
 	size_t hash;
 	unsigned char c;
+
+	if (s == NULL) {
+		return 0;
+	}
 
 	hash = 2166136261UL;
 	while ((c = (unsigned char)*s++)) {
