@@ -6,6 +6,14 @@ future.
 
 This is the one for C89/C90/ANSI C.
 
+## Others' Work
+
+Things written by others I often yank into projects.
+
+* C99 snprintf backport
+    * [C99-snprintf](https://www.jhweiss.de/software/snprintf.html)
+    * [\[Github\]](https://github.com/weiss/c99-snprintf)
+
 ## License
 
 [MIT No Attribution](https://spdx.org/licenses/MIT-0.html) (SPDX: `MIT-0`)
