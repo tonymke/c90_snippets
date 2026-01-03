@@ -17,530 +17,431 @@
 #define HTABLE_UPPER_LOAD_FACTOR_BOUND 0.75
 #endif
 
-static const struct load_factor_bounds {
-	double lower, upper;
-} load_factor_bounds = {
-	HTABLE_LOWER_LOAD_FACTOR_BOUND, /* lower */
-	HTABLE_UPPER_LOAD_FACTOR_BOUND /* upper */
+struct htable_bucket {
+	unsigned int in_use : 1, is_deleted : 1;
+	size_t hash;
+	void *key, *value;
 };
 
 struct htable_t {
 	size_t len, min_cap, cap;
-	struct htable_bucket {
-		short in_use;
-		short deleted;
-		size_t hash;
-		void *key, *value;
-	} *buckets;
+	struct htable_bucket *buckets;
 
 	htable_cmp_fn cmp_key; /* required */
 	htable_hash_fn hash_key; /* required */
 	htable_destroy_fn destroy_key, destroy_val; /* optional */
 };
 
-/*
-* Destroy each stored key/value in the given hashtable's buckets array. ht->len
-* is updated accordingly, but no resizing or free is performed on ht->buckets
-* itself.
-*/
-static void destroy_key_values(htable_t *ht);
-
-/* Locate the bucket for the provided hash and key.
-
-If the caller has already hashed the key, it may provide it.
-
-Only returns NULL if the buckets array is not allocated at all.
-*/
-static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
-						const size_t *precomputed_hash);
-
-/*
- * Inspect the given pointer and return non-zero if it points
- * to a hashtable in a valid state.
+/* Resize the table to a new capacity and rehash all entries.
+ * direction: Positive to grow, negative to shrink
+ * Returns 0 on success, -1 on allocation failure.
+ * Behavior when direction is 0 is undefined.
  */
-static int is_valid_htable(htable_t *ht);
+static int htable_resize(htable_t *ht, int direction);
 
-/*
- * Inspect the given pointer and return non-zero if it points to a bucket
- * in a valid state.
+/* Find the bucket index for a given key.
+ * Returns the index if found, or ht->cap if not found.
  */
-static int is_valid_bucket(struct htable_bucket *b);
-
-/*
-* Determine the optimal capacity for bucketing the given minimum
-* capacity and length, also considering the desired load factor bounds.
-* 
-* A return value of 0 indicates the platform cannot allocate enough to
-* accomodate, and can be treated as an out-of-memory error.
-*/
-static size_t optimal_cap(size_t min_cap, size_t len,
-			  const struct load_factor_bounds *lfb);
-
-/*
- * Resize the given hashtable's buckets array for the current optimal capacity
- * if the array's length were to be adjusted to the given new_len.
- * 
- * If the hashtable is already optimally allocated, no writes are performed.
- *
- * If new_len is 0 and the hashtable is found to not be optimally allocated, an
- * adjustment is still performed.
- * 
- * A non-zero return-value indicates reallocation failure.
- */
-static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
-				    const struct load_factor_bounds *lfb);
+static size_t htable_find(const htable_t *ht, const void *key);
 
 htable_t *htable_create(size_t min_cap, htable_hash_fn hash_key,
 			htable_cmp_fn cmp_key, htable_destroy_fn destroy_key,
 			htable_destroy_fn destroy_val)
 {
-	htable_t *ht = NULL;
+	htable_t *ht;
+	size_t i, actual_cap;
 
 	assert(hash_key != NULL);
 	assert(cmp_key != NULL);
 
+	/* Enforce minimum capacity */
+	if (min_cap < HTABLE_ABSOLUTE_MINIMUM_CAP) {
+		min_cap = HTABLE_ABSOLUTE_MINIMUM_CAP;
+	}
+
+	/* Find the first prime >= min_cap */
+	actual_cap = prime_po2s[prime_po2s_cap - 1]; /* default to largest */
+	for (i = 0; i < prime_po2s_cap; i++) {
+		if (prime_po2s[i] >= min_cap) {
+			actual_cap = prime_po2s[i];
+			break;
+		}
+	}
+
 	ht = malloc(sizeof(*ht));
 	if (ht == NULL) {
-		goto error;
+		return NULL;
+	}
+
+	ht->buckets = calloc(actual_cap, sizeof(*ht->buckets));
+	if (ht->buckets == NULL) {
+		free(ht);
+		return NULL;
 	}
 
 	ht->len = 0;
 	ht->min_cap = min_cap;
-	ht->cap = 0;
-	ht->buckets = NULL;
-	ht->cmp_key = cmp_key;
+	ht->cap = actual_cap;
 	ht->hash_key = hash_key;
+	ht->cmp_key = cmp_key;
 	ht->destroy_key = destroy_key;
 	ht->destroy_val = destroy_val;
 
-	if (optimize_buckets_for_len(ht, 0, &load_factor_bounds)) {
-		goto error;
-	}
-	assert(ht->cap);
-	assert(ht->buckets != NULL);
-
 	return ht;
-error:
-	if (ht != NULL) {
-		free(ht->buckets);
-		free(ht);
-	}
-	return NULL;
 }
 
 void htable_destroy(htable_t *ht)
 {
-	assert(is_valid_htable(ht));
+	size_t i;
 
-	destroy_key_values(ht);
+	assert(ht != NULL);
+
+	for (i = 0; i < ht->cap; i++) {
+		if (ht->buckets[i].in_use && !ht->buckets[i].is_deleted) {
+			if (ht->destroy_key != NULL) {
+				ht->destroy_key(ht->buckets[i].key);
+			}
+			if (ht->destroy_val != NULL) {
+				ht->destroy_val(ht->buckets[i].value);
+			}
+		}
+	}
+
 	free(ht->buckets);
 	free(ht);
 }
 
-size_t htable_min_cap(htable_t *ht)
+int htable_get(const htable_t *ht, const void *key, void **out_val)
 {
-	assert(is_valid_htable(ht));
+	size_t idx;
 
-	return ht->min_cap;
+	assert(ht != NULL);
+	assert(key != NULL);
+
+	idx = htable_find(ht, key);
+
+	if (idx < ht->cap) {
+		if (out_val != NULL) {
+			*out_val = ht->buckets[idx].value;
+		}
+		return 0; /* Found */
+	}
+
+	return 1; /* Not found */
 }
 
-int htable_set_min_cap(htable_t *ht, size_t new_min_cap)
+int htable_insert(htable_t *ht, void *key, void *val)
 {
-	assert(is_valid_htable(ht));
+	size_t hash, idx, i;
+	size_t insert_idx;
+	int resize_result;
 
-	ht->min_cap = new_min_cap;
+	assert(ht != NULL);
+	assert(key != NULL);
 
-	return optimize_buckets_for_len(ht, ht->len, &load_factor_bounds);
+	insert_idx = ht->cap; /* sentinel: not found */
+	hash = ht->hash_key(key);
+
+	/* Linear probe for the insertion point */
+	for (i = 0; i < ht->cap; i++) {
+		idx = (hash + i) % ht->cap;
+
+		/* If we find an in_use, non-deleted bucket with matching key, it already exists */
+		if (ht->buckets[idx].in_use && !ht->buckets[idx].is_deleted) {
+			if (ht->cmp_key(ht->buckets[idx].key, key) == 0) {
+				return 1; /* Key already exists */
+			}
+		}
+
+		/* Record first available slot (empty or deleted) */
+		if (insert_idx == ht->cap && (!ht->buckets[idx].in_use ||
+					      (ht->buckets[idx].in_use &&
+					       ht->buckets[idx].is_deleted))) {
+			insert_idx = idx;
+		}
+
+		/* Stop probing once we hit a truly empty slot */
+		if (!ht->buckets[idx].in_use) {
+			break;
+		}
+	}
+
+	/* Table is full (shouldn't happen with proper load factor management) */
+	if (insert_idx >= ht->cap) {
+		return -1;
+	}
+	ht->buckets[insert_idx].key = key;
+	ht->buckets[insert_idx].value = val;
+	ht->buckets[insert_idx].hash = hash;
+	ht->buckets[insert_idx].in_use = 1;
+	ht->buckets[insert_idx].is_deleted = 0;
+	ht->len++;
+
+	/* Check if we need to resize up */
+	if ((double)ht->len / ht->cap > HTABLE_UPPER_LOAD_FACTOR_BOUND) {
+		resize_result = htable_resize(ht, 1);
+		if (resize_result != 0) {
+			return resize_result;
+		}
+	}
+
+	return 0;
 }
 
-size_t htable_cap(htable_t *ht)
+int htable_replace(htable_t *ht, void *key, void *val)
 {
-	assert(is_valid_htable(ht));
+	size_t idx;
 
-	return ht->cap;
+	assert(ht != NULL);
+	assert(key != NULL);
+
+	idx = htable_find(ht, key);
+
+	if (idx < ht->cap) {
+		/* Destroy old key and value */
+		if (ht->destroy_key != NULL) {
+			ht->destroy_key(ht->buckets[idx].key);
+		}
+		if (ht->destroy_val != NULL) {
+			ht->destroy_val(ht->buckets[idx].value);
+		}
+		/* Replace with new key and value */
+		ht->buckets[idx].key = key;
+		ht->buckets[idx].value = val;
+		return 0; /* Replaced */
+	}
+
+	return 1; /* Key not found */
 }
 
-size_t htable_len(htable_t *ht)
+int htable_steal(htable_t *ht, const void *key, void **out_key, void **out_val)
 {
-	assert(is_valid_htable(ht));
+	size_t idx;
+	int resize_result;
 
-	return ht->len;
+	assert(ht != NULL);
+	assert(key != NULL);
+
+	idx = htable_find(ht, key);
+
+	if (idx < ht->cap) {
+		/* Return the key and value without destroying */
+		if (out_key != NULL) {
+			*out_key = ht->buckets[idx].key;
+		}
+		if (out_val != NULL) {
+			*out_val = ht->buckets[idx].value;
+		}
+
+		/* Mark as deleted */
+		ht->buckets[idx].is_deleted = 1;
+		ht->len--;
+
+		/* Check if we need to resize down */
+		if ((double)ht->len / ht->cap <
+		    HTABLE_LOWER_LOAD_FACTOR_BOUND) {
+			resize_result = htable_resize(ht, -1);
+			if (resize_result != 0) {
+				return resize_result;
+			}
+		}
+
+		return 0; /* Found and stolen */
+	}
+
+	return 1; /* Not found */
+}
+
+int htable_remove(htable_t *ht, const void *key)
+{
+	size_t idx;
+	int resize_result;
+
+	assert(ht != NULL);
+	assert(key != NULL);
+
+	idx = htable_find(ht, key);
+
+	if (idx < ht->cap) {
+		/* Destroy the key and value */
+		if (ht->destroy_key != NULL) {
+			ht->destroy_key(ht->buckets[idx].key);
+		}
+		if (ht->destroy_val != NULL) {
+			ht->destroy_val(ht->buckets[idx].value);
+		}
+
+		/* Mark as deleted */
+		ht->buckets[idx].is_deleted = 1;
+		ht->len--;
+
+		/* Check if we need to resize down */
+		if ((double)ht->len / ht->cap <
+		    HTABLE_LOWER_LOAD_FACTOR_BOUND) {
+			resize_result = htable_resize(ht, -1);
+			if (resize_result != 0) {
+				return resize_result;
+			}
+		}
+
+		return 0; /* Found and removed */
+	}
+
+	return 1; /* Not found */
 }
 
 int htable_clear(htable_t *ht)
 {
-	assert(is_valid_htable(ht));
+	size_t i;
 
-	destroy_key_values(ht);
-	assert(!ht->len);
+	assert(ht != NULL);
 
-	return optimize_buckets_for_len(ht, ht->len, &load_factor_bounds);
+	/* Destroy all stored entries */
+	for (i = 0; i < ht->cap; i++) {
+		if (ht->buckets[i].in_use && !ht->buckets[i].is_deleted) {
+			if (ht->destroy_key != NULL) {
+				ht->destroy_key(ht->buckets[i].key);
+			}
+			if (ht->destroy_val != NULL) {
+				ht->destroy_val(ht->buckets[i].value);
+			}
+		}
+	}
+
+	ht->len = 0;
+
+	/* Clear all buckets before resizing */
+	memset(ht->buckets, 0, ht->cap * sizeof(*ht->buckets));
+
+	/* Resize down to min_cap */
+	return htable_resize(ht, -1);
 }
 
-int htable_contains(htable_t *ht, void *key)
+int htable_foreach(const htable_t *ht, htable_foreach_fn fn, void *user_data)
 {
-	struct htable_bucket *b;
+	size_t i;
+	int result;
 
-	assert(is_valid_htable(ht));
+	assert(ht != NULL);
+	assert(fn != NULL);
 
-	b = find_bucket_by_key(ht, key, NULL);
-	if (b == NULL) {
-		return 0;
+	for (i = 0; i < ht->cap; i++) {
+		if (ht->buckets[i].in_use && !ht->buckets[i].is_deleted) {
+			result = fn(ht->buckets[i].key, ht->buckets[i].value,
+				    user_data);
+			if (result != 0) {
+				return result;
+			}
+		}
 	}
-	assert(is_valid_bucket(b));
-	return !!b->in_use;
+
+	return 0;
 }
 
-void *htable_get(htable_t *ht, void *key)
+size_t htable_cap(const htable_t *ht)
 {
-	struct htable_bucket *b;
-
-	assert(is_valid_htable(ht));
-
-	b = find_bucket_by_key(ht, key, NULL);
-	if (b == NULL) {
-		return NULL;
-	}
-
-	assert(is_valid_bucket(b));
-	if (!b->in_use) {
-		return NULL;
-	}
-
-	return b->value;
+	assert(ht != NULL);
+	return ht->cap;
 }
 
-int htable_remove(htable_t *ht, void *key)
+size_t htable_len(const htable_t *ht)
 {
-	struct htable_bucket *b;
+	assert(ht != NULL);
+	return ht->len;
+}
 
-	assert(is_valid_htable(ht));
+static int htable_resize(htable_t *ht, int direction)
+{
+	size_t i, j, new_cap, idx;
+	struct htable_bucket *old_buckets;
+	size_t old_cap;
 
-	b = find_bucket_by_key(ht, key, NULL);
-	if (b == NULL)
+	assert(ht != NULL);
+	assert(direction);
+
+	old_buckets = ht->buckets;
+	old_cap = ht->cap;
+
+	/* Determine new capacity */
+	if (direction > 0) {
+		/* Growing: find next prime in table */
+		new_cap =
+			prime_po2s[prime_po2s_cap - 1]; /* default to largest */
+		for (i = 0; i < prime_po2s_cap; i++) {
+			if (prime_po2s[i] > old_cap) {
+				new_cap = prime_po2s[i];
+				break;
+			}
+		}
+	} else {
+		/* Shrinking: find previous prime or min_cap */
+		new_cap = ht->min_cap;
+		for (i = 0; i < prime_po2s_cap; i++) {
+			if (prime_po2s[i] >= ht->min_cap &&
+			    prime_po2s[i] < old_cap) {
+				new_cap = prime_po2s[i];
+			}
+		}
+	}
+
+	/* No change needed */
+	if (new_cap == old_cap) {
 		return 0;
-
-	assert(is_valid_bucket(b));
-	if (!b->in_use) {
-		return 0;
 	}
 
-	assert(ht->len);
-	if (ht->destroy_val != NULL) {
-		ht->destroy_val(b->value);
-	}
-	b->value = NULL;
-	if (ht->destroy_key != NULL) {
-		ht->destroy_key(b->key);
-	}
-	b->key = NULL;
-	b->in_use = b->hash = 0;
-	b->deleted = 1;
-
-	if (optimize_buckets_for_len(ht, --ht->len, &load_factor_bounds)) {
+	ht->buckets = calloc(new_cap, sizeof(*ht->buckets));
+	if (ht->buckets == NULL) {
+		ht->buckets = old_buckets;
 		return -1;
 	}
 
-	return 1;
-}
+	ht->cap = new_cap;
+	ht->len = 0; /* Will be recounted during rehashing */
 
-int htable_set(htable_t *ht, void *key, void *value)
-{
-	struct htable_bucket *b;
-	short found_existing = 0;
-	size_t hash;
+	/* Rehash all entries */
+	for (i = 0; i < old_cap; i++) {
+		if (old_buckets[i].in_use && !old_buckets[i].is_deleted) {
+			/* Re-insert the entry into the new table */
+			for (j = 0; j < new_cap; j++) {
+				idx = (old_buckets[i].hash + j) % new_cap;
 
-	assert(is_valid_htable(ht));
-	assert(ht->cap);
-	assert(ht->buckets);
-
-	hash = ht->hash_key(key);
-	b = find_bucket_by_key(ht, key, &hash);
-	if (b == NULL) {
-		return -1; /* table full */
-	}
-
-	if (b->in_use) {
-		if (ht->destroy_val != NULL) {
-			ht->destroy_val(b->value);
-		}
-		found_existing = 1;
-	} else {
-		assert(ht->len < (size_t)-1);
-	}
-
-	b->in_use = 1;
-	b->deleted = 0;
-	b->hash = hash;
-	b->key = key;
-	b->value = value;
-
-	if (!found_existing) {
-		if (optimize_buckets_for_len(ht, ht->len + 1,
-					     &load_factor_bounds)) {
-			return -1;
-		}
-		ht->len++;
-	}
-
-	return found_existing;
-}
-
-static void destroy_key_values(struct htable_t *ht)
-{
-	size_t i;
-
-	assert(is_valid_htable(ht));
-
-	for (i = 0; i < ht->cap; i++) {
-		struct htable_bucket *b = &ht->buckets[i];
-		assert(is_valid_bucket(b));
-
-		if (b->in_use) {
-			if (ht->destroy_val != NULL) {
-				ht->destroy_val(b->value);
-			}
-			b->value = NULL;
-			if (ht->destroy_key != NULL) {
-				ht->destroy_key(b->key);
-			}
-			b->key = NULL;
-		}
-
-		b->hash = b->in_use = 0;
-		b->deleted = 0;
-	}
-	ht->len = 0;
-}
-
-static struct htable_bucket *find_bucket_by_key(htable_t *ht, void *key,
-						const size_t *precomputed_hash)
-{
-	/* Linear probe
-	   TODO quadratic probe? */
-
-	struct htable_bucket *b, *tombstone = NULL;
-	size_t i0, i, hash;
-
-	assert(is_valid_htable(ht));
-
-	if (!ht->cap || ht->buckets == NULL) {
-		return NULL;
-	}
-
-	if (precomputed_hash == NULL) {
-		hash = ht->hash_key(key);
-	} else {
-		hash = *precomputed_hash;
-	}
-
-	b = NULL;
-	i0 = i = hash % ht->cap;
-
-	do {
-		b = &ht->buckets[i];
-
-		if (!b->in_use) {
-			if (b->deleted) {
-				/* Record the first tombstone we found. Continue
-				 * searching until a true delete or non-matching
-				 * key, as the actual match may be after any
-				 * number of tombstones. */
-				if (tombstone == NULL) {
-					tombstone = b;
-				} else {
-					/* True empty slot found - the key isn't
-					 * here. */
-					return tombstone == NULL ? b : tombstone;
+				if (!ht->buckets[idx].in_use) {
+					ht->buckets[idx] = old_buckets[i];
+					ht->len++;
+					break;
 				}
 			}
-		} else if (ht->cmp_key(key, b->key) == 0) {
-			/* Found the exact key. */
-			return b;
-		}
-
-		i++;
-		if (i >= ht->cap) {
-			i = 0;
-		}
-	} while (i != i0);
-
-	/* If we wrapped around, the key isn't here. Return a tombstone if we
-	 * have one to insert into, other NULL (error). */
-	return tombstone;
-}
-
-static int is_valid_htable(htable_t *ht)
-{
-	if (ht == NULL) {
-		return 0;
-	}
-
-	if (ht->len > ht->cap) {
-		return 0;
-	}
-
-	if (ht->cap) {
-		if (ht->cap < ht->min_cap) {
-			return 0;
-		}
-		if (ht->buckets == NULL) {
-			return 0;
 		}
 	}
 
-	if (ht->hash_key == NULL) {
-		return 0;
-	}
-
-	if (ht->cmp_key == NULL) {
-		return 0;
-	}
-
-	return 1;
-}
-
-static int is_valid_bucket(struct htable_bucket *b)
-{
-	if (b == NULL) {
-		return 0;
-	}
-
-	if (!b->in_use && !b->deleted) {
-		if (b->hash != 0) {
-			return 0;
-		}
-		if (b->key != NULL) {
-			return 0;
-		}
-		if (b->value != NULL) {
-			return 0;
-		}
-	}
-
-	return 1;
-}
-
-static size_t optimal_cap(size_t min_cap, size_t len,
-			  const struct load_factor_bounds *lfb)
-{
-	size_t i;
-
-	for (i = 0; i < prime_po2s_cap; i++) {
-		unsigned long candidate = prime_po2s[i];
-
-		if (candidate < HTABLE_ABSOLUTE_MINIMUM_CAP) {
-			continue;
-		}
-
-		if (candidate > (unsigned long)((size_t)-1)) {
-			/* exceeded valid sizes we could allocate */
-			break;
-		}
-
-		if (candidate < len) {
-			continue;
-		}
-
-		if (candidate < min_cap) {
-			continue;
-		}
-
-		if (len && lfb != NULL && lfb->upper) {
-			double load_factor;
-
-			assert(lfb->lower >= 0.0 && lfb->lower < 1.0);
-			assert(lfb->upper > 0.0 && lfb->lower < 1.0);
-			assert(lfb->lower <= lfb->upper);
-			assert((double)candidate > 0.0);
-
-			load_factor = (double)len / (double)candidate;
-
-			if (load_factor > lfb->upper) {
-				continue;
-			}
-		}
-
-		return (size_t)candidate;
-	}
-	/* no valid candidate found - system can't allocate enough space. */
+	free(old_buckets);
 	return 0;
 }
 
-static int optimize_buckets_for_len(struct htable_t *ht, size_t new_len,
-				    const struct load_factor_bounds *lfb)
+static size_t htable_find(const htable_t *ht, const void *key)
 {
-	struct htable_t new;
-	short may_need_realloc = 0;
-	size_t i;
+	size_t hash, idx, i;
 
-	assert(is_valid_htable(ht));
+	assert(ht != NULL);
+	assert(key != NULL);
 
-	/* discern if we need to do anything */
-	if (ht->buckets == NULL || ht->cap < HTABLE_ABSOLUTE_MINIMUM_CAP ||
-	    ht->cap < ht->min_cap || ht->cap < new_len) {
-		may_need_realloc = 1;
-	} else if (lfb != NULL && ht->cap) {
-		double load_factor = 0.0;
+	hash = ht->hash_key(key);
 
-		assert(lfb->lower >= 0.0 && lfb->lower < 1.0);
-		assert(lfb->upper > 0.0 && lfb->lower < 1.0);
-		assert(lfb->lower <= lfb->upper);
-
-		load_factor = (double)new_len / (double)ht->cap;
-		if (load_factor >= lfb->upper) {
-			may_need_realloc = 1;
-		} else if (load_factor <= lfb->lower) {
-			may_need_realloc = -1;
-		}
-	}
-
-	if (!may_need_realloc) {
-		return 0;
-	}
-
-	/* we do - make a new ht on the stack and copy all elements in.
-	 Then free the old bucket and apply that state to the given ht pointer.*/
-
-	memcpy(&new, ht, sizeof(new));
-
-	new.cap = optimal_cap(ht->min_cap, new_len, lfb);
-	if (!new.cap) {
-		return -1; /* ENOMEM */
-	}
-	assert(ht->cap != new.cap);
-
-	new.buckets = calloc(new.cap, sizeof(*ht->buckets));
-	if (new.buckets == NULL) {
-		return -1;
-	}
-
+	/* Linear probing to find key */
 	for (i = 0; i < ht->cap; i++) {
-		struct htable_bucket *old_bucket = &ht->buckets[i], *new_bucket;
-		size_t new_idx;
+		idx = (hash + i) % ht->cap;
 
-		if (!old_bucket->in_use) {
-			continue;
-		}
-
-		new_idx = old_bucket->hash % new.cap;
-		while (new.buckets[new_idx].in_use) {
-			new_idx++;
-			if (new_idx >= new.cap) {
-				new_idx = 0;
+		if (ht->buckets[idx].in_use && !ht->buckets[idx].is_deleted) {
+			if (ht->cmp_key(ht->buckets[idx].key, key) == 0) {
+				return idx; /* Found */
 			}
 		}
-		new_bucket = &new.buckets[new_idx];
 
-		new_bucket->in_use = 1;
-		new_bucket->hash = old_bucket->hash;
-		new_bucket->key = old_bucket->key;
-		new_bucket->value = old_bucket->value;
+		/* If we hit an empty slot, key is not in table */
+		if (!ht->buckets[idx].in_use) {
+			return ht->cap; /* Not found */
+		}
 	}
 
-	free(ht->buckets);
-	ht->buckets = new.buckets;
-	ht->cap = new.cap;
-
-	return 0;
+	return ht->cap; /* Not found */
 }

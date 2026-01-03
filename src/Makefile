@@ -9,8 +9,8 @@ all: $(OBJ)
 clean:
 	$(RM) *.o $(BIN)
 
-hash.o: hash.h
-htable.o: htable.h prime_po2s.h
-log.o: log.h str.h
-prime_po2s.o: prime_po2s.h
-str.o: str.h
+hash.o: hash.c hash.h
+htable.o: htable.c htable.h prime_po2s.h prime_po2s.o
+log.o: log.c log.h str.h
+prime_po2s.o: prime_po2s.c prime_po2s.h
+str.o: str.c str.h

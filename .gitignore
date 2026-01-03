@@ -1,5 +1,6 @@
 *.o
 *.dSYM/
 tests/test_hash
+tests/test_htable
 tests/test_log
 tests/test_str
