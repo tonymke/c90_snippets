@@ -1,4 +1,5 @@
 *.o
 *.dSYM/
 tests/test_hash
+tests/test_log
 tests/test_str

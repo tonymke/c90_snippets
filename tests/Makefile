@@ -2,7 +2,7 @@
 
 CFLAGS += -I../src
 
-TESTS := test_hash test_str
+TESTS := test_hash test_str test_log
 
 all: $(TESTS)
 
@@ -19,10 +19,12 @@ clean:
 
 test_hash: test_hash.o ../src/hash.o
 test_str: test_str.o ../src/str.o
+test_log: test_log.o ../src/log.o ../src/str.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 test_hash.o: test.h ../src/hash.h
 test_str.o: test.h ../src/str.h
+test_log.o: test.h ../src/log.h ../src/str.h
 
 ../src/%.o: FORCE
 	$(MAKE) -C ../src $*.o
