@@ -65,18 +65,18 @@ int log_emit(enum log_level lvl, const char *file, unsigned lineno,
 	}
 
 	va_start(ap, fmt);
-	written = vfprintf(stderr, fmt, ap);
+	written = vfprintf(log_file(), fmt, ap);
 	va_end(ap);
 	if (written < 0) {
 		return -1;
 	}
 
-	written = fprintf(stderr, "\n");
+	written = fprintf(log_file(), "\n");
 	if (written < 0) {
 		return -1;
 	}
 
-	if (fflush(stderr) == EOF) {
+	if (fflush(log_file()) == EOF) {
 		return -1;
 	}
 
