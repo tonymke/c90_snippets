@@ -89,12 +89,23 @@ static int test_htable_insert_get(void)
 	}
 
 	/* Try to insert duplicate key */
-	result = htable_insert(ht, str_dup("key1"), str_dup("value2"));
-	if (result != 1) {
-		fprintf(stderr,
-			"FAIL: %s:%d: insert duplicate should return 1\n",
-			__FILE__, __LINE__);
-		goto cleanup;
+	{
+		char *dup_key = str_dup("key1");
+		char *dup_val = str_dup("value2");
+		result = htable_insert(ht, dup_key, dup_val);
+		if (result != 1) {
+			fprintf(stderr,
+				"FAIL: %s:%d: insert duplicate should return 1\n",
+				__FILE__, __LINE__);
+			free(dup_key);
+			free(dup_val);
+			goto cleanup;
+		}
+		/* When insert fails (result != 0), the key/value are not consumed by the table */
+		if (result != 0) {
+			free(dup_key);
+			free(dup_val);
+		}
 	}
 	if (htable_len(ht) != 1) {
 		fprintf(stderr, "FAIL: %s:%d: len should still be 1\n",
@@ -168,12 +179,23 @@ static int test_htable_replace(void)
 	}
 
 	/* Try to replace non-existent key */
-	result = htable_replace(ht, str_dup("nonexistent"), str_dup("value"));
-	if (result != 1) {
-		fprintf(stderr,
-			"FAIL: %s:%d: replace non-existent should return 1\n",
-			__FILE__, __LINE__);
-		goto cleanup;
+	{
+		char *repl_key = str_dup("nonexistent");
+		char *repl_val = str_dup("value");
+		result = htable_replace(ht, repl_key, repl_val);
+		if (result != 1) {
+			fprintf(stderr,
+				"FAIL: %s:%d: replace non-existent should return 1\n",
+				__FILE__, __LINE__);
+			free(repl_key);
+			free(repl_val);
+			goto cleanup;
+		}
+		/* When replace fails (result != 0), the key/value are not consumed by the table */
+		if (result != 0) {
+			free(repl_key);
+			free(repl_val);
+		}
 	}
 	if (htable_len(ht) != 1) {
 		fprintf(stderr, "FAIL: %s:%d: len should not change\n",
