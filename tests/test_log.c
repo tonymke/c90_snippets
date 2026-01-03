@@ -32,9 +32,23 @@ static int read_log_output(FILE *f, char *buf, size_t bufsize)
 static int test_log_level_management(void)
 {
 	enum log_level orig_level, level;
+	FILE *orig_file, *temp_file;
+	int result = 0;
 
-	/* Save original level */
+	/* Save originals */
 	orig_level = log_level();
+	orig_file = log_file();
+
+	/* Create temporary file for testing */
+	temp_file = tmpfile();
+	if (temp_file == NULL) {
+		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
+			__LINE__);
+		return 1;
+	}
+
+	/* Set to temporary file */
+	log_file_set(temp_file);
 
 	/* Test default level */
 	level = log_level();
@@ -45,31 +59,35 @@ static int test_log_level_management(void)
 	if (log_level() != LOG_LEVEL_DEBUG) {
 		fprintf(stderr, "FAIL: %s:%d: log_level_set(DEBUG) failed\n",
 			__FILE__, __LINE__);
-		log_level_set(orig_level);
-		return 1;
+		result = 1;
+		goto cleanup;
 	}
 
 	log_level_set(LOG_LEVEL_ERR);
 	if (log_level() != LOG_LEVEL_ERR) {
 		fprintf(stderr, "FAIL: %s:%d: log_level_set(ERR) failed\n",
 			__FILE__, __LINE__);
-		log_level_set(orig_level);
-		return 1;
+		result = 1;
+		goto cleanup;
 	}
 
 	log_level_set(LOG_LEVEL_EMERG);
 	if (log_level() != LOG_LEVEL_EMERG) {
 		fprintf(stderr, "FAIL: %s:%d: log_level_set(EMERG) failed\n",
 			__FILE__, __LINE__);
-		log_level_set(orig_level);
-		return 1;
+		result = 1;
+		goto cleanup;
 	}
 
-	/* Restore original level */
+cleanup:
 	log_level_set(orig_level);
+	log_file_set(orig_file);
+	fclose(temp_file);
 
-	printf("  log_level_management: OK\n");
-	return 0;
+	if (result == 0) {
+		printf("  log_level_management: OK\n");
+	}
+	return result;
 }
 
 static int test_log_file_management(void)
