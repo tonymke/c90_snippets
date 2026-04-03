@@ -1,12 +1,11 @@
 #include <assert.h>
-#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "log.h"
-#include "str.h"
 
 #ifndef LOG_FILE_INITIAL
 #define LOG_FILE_INITIAL stderr
@@ -21,6 +20,7 @@ static enum log_level current_lvl = LOG_LEVEL_INITIAL;
 
 static int is_valid_log_level(enum log_level lvl);
 static const char *log_level_s(enum log_level lvl);
+static void trim_newline(char *s);
 
 int log_emit(enum log_level lvl, const char *file, unsigned lineno,
 	     const char *fmt, ...)
@@ -47,7 +47,7 @@ int log_emit(enum log_level lvl, const char *file, unsigned lineno,
 	if (now_s == NULL) {
 		return -1;
 	}
-	str_rstrip(now_s);
+	trim_newline(now_s);
 
 	lvl_s = log_level_s(lvl);
 	assert(lvl_s != NULL);
@@ -135,4 +135,16 @@ static const char *log_level_s(enum log_level lvl)
 
 	assert(is_valid_log_level(lvl));
 	return level_ss[lvl];
+}
+
+static void trim_newline(char *s)
+{
+	size_t len;
+
+	assert(s != NULL);
+
+	len = strlen(s);
+	if (len > 0 && s[len - 1] == '\n') {
+		s[len - 1] = '\0';
+	}
 }
