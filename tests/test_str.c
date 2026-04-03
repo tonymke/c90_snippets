@@ -13,48 +13,20 @@ static int test_str_dup(void)
 	/* Test basic duplication */
 	original = "hello";
 	dup1 = str_dup(original);
-	if (dup1 == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: str_dup should not return NULL for valid input\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
-	if (strcmp(dup1, original) != 0) {
-		fprintf(stderr, "FAIL: %s:%d: duplicated string should match original\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
-	if (dup1 == original) {
-		fprintf(stderr, "FAIL: %s:%d: dup should be a different pointer\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(dup1 != NULL, "str_dup should not return NULL for valid input");
+	ASSERT_EQ(strcmp(dup1, original), 0, "duplicated string should match original");
+	ASSERT(dup1 != original, "dup should be a different pointer");
 
 	/* Test empty string */
 	dup2 = str_dup("");
-	if (dup2 == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: str_dup should handle empty strings\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
-	if (strlen(dup2) != 0) {
-		fprintf(stderr, "FAIL: %s:%d: duplicated empty string should have length 0\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(dup2 != NULL, "str_dup should handle empty strings");
+	ASSERT_EQ(strlen(dup2), 0, "duplicated empty string should have length 0");
 
 	/* Test long string */
 	original = "The quick brown fox jumps over the lazy dog";
 	dup3 = str_dup(original);
-	if (dup3 == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: str_dup should handle long strings\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
-	if (strcmp(dup3, original) != 0) {
-		fprintf(stderr, "FAIL: %s:%d: long string should be duplicated correctly\n", __FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(dup3 != NULL, "str_dup should handle long strings");
+	ASSERT_EQ(strcmp(dup3, original), 0, "long string should be duplicated correctly");
 
 cleanup:
 	free(dup1);
@@ -71,6 +43,7 @@ static int test_str_lstrip(void)
 {
 	char buf[256];
 	size_t len;
+	int result = 0;
 
 	/* Test no leading whitespace */
 	strcpy(buf, "hello");
@@ -101,14 +74,18 @@ static int test_str_lstrip(void)
 	len = str_lstrip(buf);
 	ASSERT_EQ(len, 0, "empty string should have length 0");
 
-	printf("  str_lstrip: OK\n");
-	return 0;
+cleanup:
+	if (result == 0) {
+		printf("  str_lstrip: OK\n");
+	}
+	return result;
 }
 
 static int test_str_rstrip(void)
 {
 	char buf[256];
 	size_t len;
+	int result = 0;
 
 	/* Test no trailing whitespace */
 	strcpy(buf, "hello");
@@ -139,14 +116,18 @@ static int test_str_rstrip(void)
 	len = str_rstrip(buf);
 	ASSERT_EQ(len, 0, "empty string should have length 0");
 
-	printf("  str_rstrip: OK\n");
-	return 0;
+cleanup:
+	if (result == 0) {
+		printf("  str_rstrip: OK\n");
+	}
+	return result;
 }
 
 static int test_str_strip(void)
 {
 	char buf[256];
 	size_t len;
+	int result = 0;
 
 	/* Test no whitespace */
 	strcpy(buf, "hello");
@@ -189,8 +170,11 @@ static int test_str_strip(void)
 	len = str_strip(buf);
 	ASSERT_EQ(len, 0, "empty string should have length 0");
 
-	printf("  str_strip: OK\n");
-	return 0;
+cleanup:
+	if (result == 0) {
+		printf("  str_strip: OK\n");
+	}
+	return result;
 }
 
 int main(void)

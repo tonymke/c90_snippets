@@ -1,4 +1,4 @@
-.PHONY: all src clean check
+.PHONY: all src clean check valgrind
 
 export CFLAGS ?= -Og -g -pedantic -std=c90 -Wall -Werror -Wextra -Wfatal-errors \
 			-Wno-error=pedantic -Wno-error=unused-parameter
@@ -13,6 +13,9 @@ clean:
 
 check:
 	$(MAKE) -C tests check
+
+valgrind:
+	$(MAKE) -C tests valgrind
 
 src:
 	$(MAKE) -C src all

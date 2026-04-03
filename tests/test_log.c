@@ -41,48 +41,31 @@ static int test_log_level_management(void)
 
 	/* Create temporary file for testing */
 	temp_file = tmpfile();
-	if (temp_file == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
-			__LINE__);
-		return 1;
-	}
+	ASSERT(temp_file != NULL, "tmpfile() failed");
 
 	/* Set to temporary file */
 	log_file_set(temp_file);
 
 	/* Test default level */
 	level = log_level();
-	printf("  log_level_management: initial level is %d\n", level);
+	printf("  log_level_management: initial level is %d\n", (int)level);
 
 	/* Test setting and getting levels */
 	log_level_set(LOG_LEVEL_DEBUG);
-	if (log_level() != LOG_LEVEL_DEBUG) {
-		fprintf(stderr, "FAIL: %s:%d: log_level_set(DEBUG) failed\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT_EQ(log_level(), LOG_LEVEL_DEBUG, "log_level_set(DEBUG) failed");
 
 	log_level_set(LOG_LEVEL_ERR);
-	if (log_level() != LOG_LEVEL_ERR) {
-		fprintf(stderr, "FAIL: %s:%d: log_level_set(ERR) failed\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT_EQ(log_level(), LOG_LEVEL_ERR, "log_level_set(ERR) failed");
 
 	log_level_set(LOG_LEVEL_EMERG);
-	if (log_level() != LOG_LEVEL_EMERG) {
-		fprintf(stderr, "FAIL: %s:%d: log_level_set(EMERG) failed\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT_EQ(log_level(), LOG_LEVEL_EMERG, "log_level_set(EMERG) failed");
 
 cleanup:
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	fclose(temp_file);
+	if (temp_file) {
+		fclose(temp_file);
+	}
 
 	if (result == 0) {
 		printf("  log_level_management: OK\n");
@@ -100,24 +83,18 @@ static int test_log_file_management(void)
 
 	/* Create temporary file for testing */
 	temp_file = tmpfile();
-	if (temp_file == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
-			__LINE__);
-		return 1;
-	}
+	ASSERT(temp_file != NULL, "tmpfile() failed");
 
 	/* Test setting and getting file */
 	log_file_set(temp_file);
-	if (log_file() != temp_file) {
-		fprintf(stderr, "FAIL: %s:%d: log_file_set failed\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT_EQ(log_file(), temp_file, "log_file_set failed");
 
 cleanup:
+	log_level_set(LOG_LEVEL_INFO); /* default */
 	log_file_set(orig_file);
-	fclose(temp_file);
+	if (temp_file) {
+		fclose(temp_file);
+	}
 
 	if (result == 0) {
 		printf("  log_file_management: OK\n");
@@ -138,11 +115,7 @@ static int test_log_emission(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	if (temp_file == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
-			__LINE__);
-		return 1;
-	}
+	ASSERT(temp_file != NULL, "tmpfile() failed");
 
 	/* Set to DEBUG to capture all messages */
 	log_level_set(LOG_LEVEL_DEBUG);
@@ -154,32 +127,22 @@ static int test_log_emission(void)
 	log_emit(LOG_LEVEL_ERR, "test_log_emission", 127, "err %s", "test");
 
 	/* Read back output */
-	if (read_log_output(temp_file, buf, sizeof(buf)) < 0) {
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
 
 	/* Verify output is non-empty - just check that messages were logged */
-	if (strlen(buf) == 0) {
-		fprintf(stderr, "FAIL: %s:%d: no output captured\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(strlen(buf) > 0, "no output captured");
 
 	/* Check for log level indicators */
-	if (strstr(buf, "INFO") == NULL || strstr(buf, "WARNING") == NULL ||
-	    strstr(buf, "ERR") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: expected log levels not in output\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(strstr(buf, "INFO") != NULL, "INFO level not in output");
+	ASSERT(strstr(buf, "WARNING") != NULL, "WARNING level not in output");
+	ASSERT(strstr(buf, "ERR") != NULL, "ERR level not in output");
 
 cleanup:
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	fclose(temp_file);
+	if (temp_file) {
+		fclose(temp_file);
+	}
 
 	if (result == 0) {
 		printf("  log_emission: OK\n");
@@ -200,11 +163,7 @@ static int test_log_level_filtering(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	if (temp_file == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
-			__LINE__);
-		return 1;
-	}
+	ASSERT(temp_file != NULL, "tmpfile() failed");
 
 	/* Set to WARNING level - DEBUG and INFO should not appear */
 	log_level_set(LOG_LEVEL_WARNING);
@@ -216,46 +175,23 @@ static int test_log_level_filtering(void)
 	log_emit(LOG_LEVEL_ERR, "test", 4, "err");
 
 	/* Read back output */
-	if (read_log_output(temp_file, buf, sizeof(buf)) < 0) {
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
 
 	/* Verify filtering: WARNING and above should appear */
-	if (strlen(buf) == 0) {
-		fprintf(stderr, "FAIL: %s:%d: no output captured\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "WARNING") == NULL || strstr(buf, "ERR") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: warning/error not in output\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(strlen(buf) > 0, "no output captured");
+	ASSERT(strstr(buf, "WARNING") != NULL, "WARNING not in output");
+	ASSERT(strstr(buf, "ERR") != NULL, "ERR not in output");
 
 	/* DEBUG and INFO should not appear */
-	if (strstr(buf, "DEBUG") != NULL) {
-		fprintf(stderr,
-			"FAIL: %s:%d: DEBUG should be filtered out\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "INFO") != NULL) {
-		fprintf(stderr, "FAIL: %s:%d: INFO should be filtered out\n",
-			__FILE__, __LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(strstr(buf, "DEBUG") == NULL, "DEBUG should be filtered out");
+	ASSERT(strstr(buf, "INFO") == NULL, "INFO should be filtered out");
 
 cleanup:
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	fclose(temp_file);
+	if (temp_file) {
+		fclose(temp_file);
+	}
 
 	if (result == 0) {
 		printf("  log_level_filtering: OK\n");
@@ -276,11 +212,7 @@ static int test_log_macros(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	if (temp_file == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: tmpfile() failed\n", __FILE__,
-			__LINE__);
-		return 1;
-	}
+	ASSERT(temp_file != NULL, "tmpfile() failed");
 
 	/* Set to DEBUG to capture all */
 	log_level_set(LOG_LEVEL_DEBUG);
@@ -293,51 +225,21 @@ static int test_log_macros(void)
 	log_debug3("msg4 %d %d %d", 1, 2, 3);
 
 	/* Read back output */
-	if (read_log_output(temp_file, buf, sizeof(buf)) < 0) {
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
 
 	/* Verify all messages appear by checking for level keywords */
-	if (strlen(buf) == 0) {
-		fprintf(stderr, "FAIL: %s:%d: no output captured\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "INFO") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: info macro failed\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "WARNING") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: warning1 macro failed\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "ERR") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: err2 macro failed\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
-
-	if (strstr(buf, "DEBUG") == NULL) {
-		fprintf(stderr, "FAIL: %s:%d: debug3 macro failed\n", __FILE__,
-			__LINE__);
-		result = 1;
-		goto cleanup;
-	}
+	ASSERT(strlen(buf) > 0, "no output captured");
+	ASSERT(strstr(buf, "INFO") != NULL, "info macro failed");
+	ASSERT(strstr(buf, "WARNING") != NULL, "warning1 macro failed");
+	ASSERT(strstr(buf, "ERR") != NULL, "err2 macro failed");
+	ASSERT(strstr(buf, "DEBUG") != NULL, "debug3 macro failed");
 
 cleanup:
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	fclose(temp_file);
+	if (temp_file) {
+		fclose(temp_file);
+	}
 
 	if (result == 0) {
 		printf("  log_macros: OK\n");
