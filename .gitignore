@@ -1,5 +1,6 @@
-*.o
 *.dSYM/
+*.o
+AGENTS.local.md
 tests/test_hash
 tests/test_htable
 tests/test_log
