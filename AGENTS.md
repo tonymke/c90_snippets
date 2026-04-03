@@ -41,3 +41,5 @@ This is a repository of C90/C89/ANSI C snippets I've had to type several times b
 - `make` builds the project
 - `make clean` cleans the project
 - `make check` runs the tests
+- `make valgrind` runs the tests with valgrind
+- Prefer running make commands from the project root, which defines common flags. There are recursive rules defined in the root Makefile, e.g. `make src/%` and `make tests/%` to make this work.
