@@ -1,9 +1,8 @@
-#include <ctype.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "test.h"
 #include "log.h"
 
 #define BUFFER_SIZE 4096
@@ -29,11 +28,10 @@ static int read_log_output(FILE *f, char *buf, size_t bufsize)
 	return (int)nread;
 }
 
-static int test_log_level_management(void)
+static void test_log_level_management(void)
 {
 	enum log_level orig_level, level;
 	FILE *orig_file, *temp_file;
-	int result = 0;
 
 	/* Save originals */
 	orig_level = log_level();
@@ -41,7 +39,7 @@ static int test_log_level_management(void)
 
 	/* Create temporary file for testing */
 	temp_file = tmpfile();
-	ASSERT(temp_file != NULL, "tmpfile() failed");
+	assert(temp_file != NULL);
 
 	/* Set to temporary file */
 	log_file_set(temp_file);
@@ -52,62 +50,50 @@ static int test_log_level_management(void)
 
 	/* Test setting and getting levels */
 	log_level_set(LOG_LEVEL_DEBUG);
-	ASSERT_EQ(log_level(), LOG_LEVEL_DEBUG, "log_level_set(DEBUG) failed");
+	assert(log_level() == LOG_LEVEL_DEBUG);
 
 	log_level_set(LOG_LEVEL_ERR);
-	ASSERT_EQ(log_level(), LOG_LEVEL_ERR, "log_level_set(ERR) failed");
+	assert(log_level() == LOG_LEVEL_ERR);
 
 	log_level_set(LOG_LEVEL_EMERG);
-	ASSERT_EQ(log_level(), LOG_LEVEL_EMERG, "log_level_set(EMERG) failed");
+	assert(log_level() == LOG_LEVEL_EMERG);
 
-cleanup:
+	/* Restoration */
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	if (temp_file) {
-		fclose(temp_file);
-	}
+	fclose(temp_file);
 
-	if (result == 0) {
-		printf("  log_level_management: OK\n");
-	}
-	return result;
+	printf("  log_level_management: OK\n");
 }
 
-static int test_log_file_management(void)
+static void test_log_file_management(void)
 {
 	FILE *orig_file, *temp_file;
-	int result = 0;
 
 	/* Save original file */
 	orig_file = log_file();
 
 	/* Create temporary file for testing */
 	temp_file = tmpfile();
-	ASSERT(temp_file != NULL, "tmpfile() failed");
+	assert(temp_file != NULL);
 
 	/* Test setting and getting file */
 	log_file_set(temp_file);
-	ASSERT_EQ(log_file(), temp_file, "log_file_set failed");
+	assert(log_file() == temp_file);
 
-cleanup:
+	/* Restoration */
 	log_level_set(LOG_LEVEL_INFO); /* default */
 	log_file_set(orig_file);
-	if (temp_file) {
-		fclose(temp_file);
-	}
+	fclose(temp_file);
 
-	if (result == 0) {
-		printf("  log_file_management: OK\n");
-	}
-	return result;
+	printf("  log_file_management: OK\n");
 }
 
-static int test_log_emission(void)
+static void test_log_emission(void)
 {
 	FILE *orig_file, *temp_file;
 	char buf[BUFFER_SIZE];
 	enum log_level orig_level;
-	int result = 0;
 
 	/* Save originals */
 	orig_file = log_file();
@@ -115,7 +101,7 @@ static int test_log_emission(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	ASSERT(temp_file != NULL, "tmpfile() failed");
+	assert(temp_file != NULL);
 
 	/* Set to DEBUG to capture all messages */
 	log_level_set(LOG_LEVEL_DEBUG);
@@ -127,35 +113,29 @@ static int test_log_emission(void)
 	log_emit(LOG_LEVEL_ERR, "test_log_emission", 127, "err %s", "test");
 
 	/* Read back output */
-	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
+	assert(read_log_output(temp_file, buf, sizeof(buf)) >= 0);
 
 	/* Verify output is non-empty - just check that messages were logged */
-	ASSERT(strlen(buf) > 0, "no output captured");
+	assert(strlen(buf) > 0);
 
 	/* Check for log level indicators */
-	ASSERT(strstr(buf, "INFO") != NULL, "INFO level not in output");
-	ASSERT(strstr(buf, "WARNING") != NULL, "WARNING level not in output");
-	ASSERT(strstr(buf, "ERR") != NULL, "ERR level not in output");
+	assert(strstr(buf, "INFO") != NULL);
+	assert(strstr(buf, "WARNING") != NULL);
+	assert(strstr(buf, "ERR") != NULL);
 
-cleanup:
+	/* Restoration */
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	if (temp_file) {
-		fclose(temp_file);
-	}
+	fclose(temp_file);
 
-	if (result == 0) {
-		printf("  log_emission: OK\n");
-	}
-	return result;
+	printf("  log_emission: OK\n");
 }
 
-static int test_log_level_filtering(void)
+static void test_log_level_filtering(void)
 {
 	FILE *orig_file, *temp_file;
 	char buf[BUFFER_SIZE];
 	enum log_level orig_level;
-	int result = 0;
 
 	/* Save originals */
 	orig_file = log_file();
@@ -163,7 +143,7 @@ static int test_log_level_filtering(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	ASSERT(temp_file != NULL, "tmpfile() failed");
+	assert(temp_file != NULL);
 
 	/* Set to WARNING level - DEBUG and INFO should not appear */
 	log_level_set(LOG_LEVEL_WARNING);
@@ -175,36 +155,30 @@ static int test_log_level_filtering(void)
 	log_emit(LOG_LEVEL_ERR, "test", 4, "err");
 
 	/* Read back output */
-	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
+	assert(read_log_output(temp_file, buf, sizeof(buf)) >= 0);
 
 	/* Verify filtering: WARNING and above should appear */
-	ASSERT(strlen(buf) > 0, "no output captured");
-	ASSERT(strstr(buf, "WARNING") != NULL, "WARNING not in output");
-	ASSERT(strstr(buf, "ERR") != NULL, "ERR not in output");
+	assert(strlen(buf) > 0);
+	assert(strstr(buf, "WARNING") != NULL);
+	assert(strstr(buf, "ERR") != NULL);
 
 	/* DEBUG and INFO should not appear */
-	ASSERT(strstr(buf, "DEBUG") == NULL, "DEBUG should be filtered out");
-	ASSERT(strstr(buf, "INFO") == NULL, "INFO should be filtered out");
+	assert(strstr(buf, "DEBUG") == NULL);
+	assert(strstr(buf, "INFO") == NULL);
 
-cleanup:
+	/* Restoration */
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	if (temp_file) {
-		fclose(temp_file);
-	}
+	fclose(temp_file);
 
-	if (result == 0) {
-		printf("  log_level_filtering: OK\n");
-	}
-	return result;
+	printf("  log_level_filtering: OK\n");
 }
 
-static int test_log_macros(void)
+static void test_log_macros(void)
 {
 	FILE *orig_file, *temp_file;
 	char buf[BUFFER_SIZE];
 	enum log_level orig_level;
-	int result = 0;
 
 	/* Save originals */
 	orig_file = log_file();
@@ -212,7 +186,7 @@ static int test_log_macros(void)
 
 	/* Create temporary file */
 	temp_file = tmpfile();
-	ASSERT(temp_file != NULL, "tmpfile() failed");
+	assert(temp_file != NULL);
 
 	/* Set to DEBUG to capture all */
 	log_level_set(LOG_LEVEL_DEBUG);
@@ -225,43 +199,34 @@ static int test_log_macros(void)
 	log_debug3("msg4 %d %d %d", 1, 2, 3);
 
 	/* Read back output */
-	ASSERT(read_log_output(temp_file, buf, sizeof(buf)) >= 0, "read_log_output failed");
+	assert(read_log_output(temp_file, buf, sizeof(buf)) >= 0);
 
 	/* Verify all messages appear by checking for level keywords */
-	ASSERT(strlen(buf) > 0, "no output captured");
-	ASSERT(strstr(buf, "INFO") != NULL, "info macro failed");
-	ASSERT(strstr(buf, "WARNING") != NULL, "warning1 macro failed");
-	ASSERT(strstr(buf, "ERR") != NULL, "err2 macro failed");
-	ASSERT(strstr(buf, "DEBUG") != NULL, "debug3 macro failed");
+	assert(strlen(buf) > 0);
+	assert(strstr(buf, "INFO") != NULL);
+	assert(strstr(buf, "WARNING") != NULL);
+	assert(strstr(buf, "ERR") != NULL);
+	assert(strstr(buf, "DEBUG") != NULL);
 
-cleanup:
+	/* Restoration */
 	log_level_set(orig_level);
 	log_file_set(orig_file);
-	if (temp_file) {
-		fclose(temp_file);
-	}
+	fclose(temp_file);
 
-	if (result == 0) {
-		printf("  log_macros: OK\n");
-	}
-	return result;
+	printf("  log_macros: OK\n");
 }
 
 int main(void)
 {
-	int result = 0;
-
 	printf("Running log tests...\n");
 
-	result |= test_log_level_management();
-	result |= test_log_file_management();
-	result |= test_log_emission();
-	result |= test_log_level_filtering();
-	result |= test_log_macros();
+	test_log_level_management();
+	test_log_file_management();
+	test_log_emission();
+	test_log_level_filtering();
+	test_log_macros();
 
-	if (result == 0) {
-		printf("All log tests passed!\n");
-	}
+	printf("All log tests passed!\n");
 
-	return result;
+	return 0;
 }

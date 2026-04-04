@@ -1,169 +1,140 @@
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "hash.h"
-#include "test.h"
 
-static int test_hash_int_rjenkins_nomult(void)
+static void test_hash_int_rjenkins_nomult(void)
 {
 	size_t h1, h2;
-	int result = 0;
 
 	/* Test basic functionality */
 	h1 = hash_int_rjenkins_nomult(0);
 	h2 = hash_int_rjenkins_nomult(0);
-	ASSERT_EQ(h1, h2, "same input should produce same hash");
+	assert(h1 == h2);
 
 	/* Test different inputs produce different hashes */
 	h1 = hash_int_rjenkins_nomult(0);
 	h2 = hash_int_rjenkins_nomult(1);
-	ASSERT(h1 != h2, "different inputs should produce different hashes");
+	assert(h1 != h2);
 
 	/* Test known values */
 	h1 = hash_int_rjenkins_nomult(42);
-	ASSERT(h1 != 42, "hash should transform the input");
+	assert(h1 != 42);
 
-cleanup:
-	if (result == 0) {
-		printf("  hash_int_rjenkins_nomult: OK\n");
-	}
-	return result;
+	printf("  hash_int_rjenkins_nomult: OK\n");
 }
 
-static int test_hash_int_knuth(void)
+static void test_hash_int_knuth(void)
 {
 	size_t h1, h2;
-	int result = 0;
 
 	/* Test basic functionality */
 	h1 = hash_int_knuth(0);
 	h2 = hash_int_knuth(0);
-	ASSERT_EQ(h1, h2, "same input should produce same hash");
+	assert(h1 == h2);
 
 	/* Test different inputs produce different hashes */
 	h1 = hash_int_knuth(0);
 	h2 = hash_int_knuth(1);
-	ASSERT(h1 != h2, "different inputs should produce different hashes");
+	assert(h1 != h2);
 
-cleanup:
-	if (result == 0) {
-		printf("  hash_int_knuth: OK\n");
-	}
-	return result;
+	printf("  hash_int_knuth: OK\n");
 }
 
-static int test_hash_int_multiandxor(void)
+static void test_hash_int_multiandxor(void)
 {
 	size_t h1, h2;
-	int result = 0;
 
 	/* Test basic functionality */
 	h1 = hash_int_multiandxor(0);
 	h2 = hash_int_multiandxor(0);
-	ASSERT_EQ(h1, h2, "same input should produce same hash");
+	assert(h1 == h2);
 
 	/* Test different inputs produce different hashes */
 	h1 = hash_int_multiandxor(0);
 	h2 = hash_int_multiandxor(1);
-	ASSERT(h1 != h2, "different inputs should produce different hashes");
+	assert(h1 != h2);
 
-cleanup:
-	if (result == 0) {
-		printf("  hash_int_multiandxor: OK\n");
-	}
-	return result;
+	printf("  hash_int_multiandxor: OK\n");
 }
 
-static int test_hash_cstring_djb2(void)
+static void test_hash_cstring_djb2(void)
 {
 	size_t h1, h2;
-	int result = 0;
 
 	/* Test NULL handling */
 	h1 = hash_cstring_djb2(NULL);
-	ASSERT_EQ(h1, 0, "NULL string should hash to 0");
+	assert(h1 == 0);
 
 	/* Test empty string */
 	h1 = hash_cstring_djb2("");
-	ASSERT(h1 == 5381, "empty string should return initial hash value");
+	assert(h1 == 5381);
 
 	/* Test same strings produce same hash */
 	h1 = hash_cstring_djb2("hello");
 	h2 = hash_cstring_djb2("hello");
-	ASSERT_EQ(h1, h2, "same string should produce same hash");
+	assert(h1 == h2);
 
 	/* Test different strings produce different hashes */
 	h1 = hash_cstring_djb2("hello");
 	h2 = hash_cstring_djb2("world");
-	ASSERT(h1 != h2, "different strings should produce different hashes");
+	assert(h1 != h2);
 
 	/* Test case sensitivity */
 	h1 = hash_cstring_djb2("Hello");
 	h2 = hash_cstring_djb2("hello");
-	ASSERT(h1 != h2, "hash should be case sensitive");
+	assert(h1 != h2);
 
-cleanup:
-	if (result == 0) {
-		printf("  hash_cstring_djb2: OK\n");
-	}
-	return result;
+	printf("  hash_cstring_djb2: OK\n");
 }
 
-static int test_hash_cstring_fnv_1a(void)
+static void test_hash_cstring_fnv_1a(void)
 {
 	size_t h1, h2;
-	int result = 0;
 
 	/* Test NULL handling */
 	h1 = hash_cstring_fnv_1a(NULL);
-	ASSERT_EQ(h1, 0, "NULL string should hash to 0");
+	assert(h1 == 0);
 
 	/* Test empty string */
 	h1 = hash_cstring_fnv_1a("");
-	ASSERT(h1 == 2166136261UL, "empty string should return initial FNV offset");
+	assert(h1 == 2166136261UL);
 
 	/* Test same strings produce same hash */
 	h1 = hash_cstring_fnv_1a("hello");
 	h2 = hash_cstring_fnv_1a("hello");
-	ASSERT_EQ(h1, h2, "same string should produce same hash");
+	assert(h1 == h2);
 
 	/* Test different strings produce different hashes */
 	h1 = hash_cstring_fnv_1a("hello");
 	h2 = hash_cstring_fnv_1a("world");
-	ASSERT(h1 != h2, "different strings should produce different hashes");
+	assert(h1 != h2);
 
 	/* Test case sensitivity */
 	h1 = hash_cstring_fnv_1a("Hello");
 	h2 = hash_cstring_fnv_1a("hello");
-	ASSERT(h1 != h2, "hash should be case sensitive");
+	assert(h1 != h2);
 
 	/* Test that djb2 and fnv1a produce different results */
 	h1 = hash_cstring_djb2("test");
 	h2 = hash_cstring_fnv_1a("test");
-	ASSERT(h1 != h2, "different hash algorithms should produce different results");
+	assert(h1 != h2);
 
-cleanup:
-	if (result == 0) {
-		printf("  hash_cstring_fnv_1a: OK\n");
-	}
-	return result;
+	printf("  hash_cstring_fnv_1a: OK\n");
 }
 
 int main(void)
 {
-	int result = 0;
-
 	printf("Running hash tests...\n");
 
-	result |= test_hash_int_rjenkins_nomult();
-	result |= test_hash_int_knuth();
-	result |= test_hash_int_multiandxor();
-	result |= test_hash_cstring_djb2();
-	result |= test_hash_cstring_fnv_1a();
+	test_hash_int_rjenkins_nomult();
+	test_hash_int_knuth();
+	test_hash_int_multiandxor();
+	test_hash_cstring_djb2();
+	test_hash_cstring_fnv_1a();
 
-	if (result == 0) {
-		printf("All hash tests passed!\n");
-	}
+	printf("All hash tests passed!\n");
 
-	return result;
+	return 0;
 }
