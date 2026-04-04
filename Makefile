@@ -2,7 +2,7 @@
 
 export CFLAGS ?= -Og -g -pedantic -std=c90 -Wall -Werror -Wextra -Wfatal-errors \
 			-Wno-error=pedantic -Wno-error=unused-parameter
-export LDFLAGS ?= -lm # log.h uses math.h
+export LDFLAGS ?=
 export LDLIBS ?=
 
 all: src
